@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### What's Changed
 
-* CI publish failure fix by [@joetannenbaum](https://github.com/joetannenbaum) in https://github.com/ugarit/passkeys/pull/36
+- CI publish failure fix by [@joetannenbaum](https://github.com/joetannenbaum) in https://github.com/ugarit/passkeys/pull/36
 
 **Full Changelog**: https://github.com/ugarit/passkeys/compare/v0.3.0...v0.4.0
 
