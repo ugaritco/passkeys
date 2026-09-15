@@ -367,8 +367,8 @@ This package uses TypeScript types from [`@simplewebauthn/browser`](https://www.
 
 ## Package Exports
 
-| Entry Point                | Exports                                  |
-| -------------------------- | ---------------------------------------- |
+| Entry Point               | Exports                                  |
+| ------------------------- | ---------------------------------------- |
 | `@ugarit/passkeys`        | `Passkeys`                               |
 | `@ugarit/passkeys/react`  | `usePasskeyVerify`, `usePasskeyRegister` |
 | `@ugarit/passkeys/vue`    | `usePasskeyVerify`, `usePasskeyRegister` |
