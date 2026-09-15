@@ -1,0 +1,207 @@
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+    useSyncExternalStore,
+} from "react";
+import { PasskeyError, toPasskeyError } from "../errors";
+import { Passkeys } from "../passkeys";
+import { resolveRemember } from "../remember";
+import type {
+    RegisterRouteOptions,
+    VerifyOptions,
+    VerifyResponse,
+} from "../types";
+
+type UsePasskeyVerifyOptions = VerifyOptions & {
+    autofill?: boolean;
+    onSuccess?: (response: VerifyResponse) => void;
+    onError?: (error: PasskeyError) => void;
+};
+
+type UsePasskeyRegisterOptions = RegisterRouteOptions & {
+    onSuccess?: () => void;
+    onError?: (error: PasskeyError) => void;
+};
+
+// Stable references for useSyncExternalStore. `subscribe` is a no-op because
+// WebAuthn support doesn't change during a session; we only care about the
+// SSR/client split that `getServerSnapshot` provides.
+const noop = (): void => undefined;
+const subscribeSupport = () => noop;
+const getSupportClientSnapshot = () => Passkeys.isSupported();
+const getSupportServerSnapshot = () => false;
+
+export const usePasskeyVerify = ({
+    autofill = false,
+    remember,
+    routes,
+    onSuccess,
+    onError,
+}: UsePasskeyVerifyOptions = {}) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [errorInstance, setErrorInstance] = useState<PasskeyError | null>(
+        null,
+    );
+    const isSupported = useSyncExternalStore(
+        subscribeSupport,
+        getSupportClientSnapshot,
+        getSupportServerSnapshot,
+    );
+
+    const onSuccessRef = useRef(onSuccess);
+    const onErrorRef = useRef(onError);
+    const rememberRef = useRef(remember);
+    const routesRef = useRef(routes);
+
+    useEffect(() => {
+        onSuccessRef.current = onSuccess;
+        onErrorRef.current = onError;
+        rememberRef.current = remember;
+        routesRef.current = routes;
+    });
+
+    const resetError = () => {
+        setError(null);
+        setErrorInstance(null);
+    };
+
+    const handleError = (e: unknown) => {
+        const err = toPasskeyError(e);
+        setError(err.message);
+        setErrorInstance(err);
+        onErrorRef.current?.(err);
+    };
+
+    const verify = useCallback(async (): Promise<void> => {
+        setIsLoading(true);
+        resetError();
+
+        try {
+            const response = await Passkeys.verify({
+                routes: routesRef.current,
+                remember: () => resolveRemember(rememberRef.current),
+            });
+            onSuccessRef.current?.(response);
+        } catch (e) {
+            handleError(e);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!autofill) {
+            return;
+        }
+
+        let cancelled = false;
+
+        Passkeys.cancel();
+
+        const attemptToAutofill = async (): Promise<void> => {
+            const supported = await Passkeys.isAutofillSupported();
+
+            if (cancelled || !supported) {
+                return;
+            }
+
+            setIsLoading(true);
+            resetError();
+
+            try {
+                const response = await Passkeys.autofill({
+                    routes: routesRef.current,
+                    remember: () => resolveRemember(rememberRef.current),
+                });
+
+                if (cancelled || !response) {
+                    return;
+                }
+
+                onSuccessRef.current?.(response);
+            } catch (e) {
+                if (cancelled) {
+                    return;
+                }
+
+                handleError(e);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        void attemptToAutofill();
+
+        return () => {
+            cancelled = true;
+            Passkeys.cancel();
+        };
+    }, [autofill]);
+
+    return {
+        verify,
+        isLoading,
+        error,
+        errorInstance,
+        isSupported,
+    };
+};
+
+export const usePasskeyRegister = ({
+    routes,
+    onSuccess,
+    onError,
+}: UsePasskeyRegisterOptions = {}) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [errorInstance, setErrorInstance] = useState<PasskeyError | null>(
+        null,
+    );
+    const isSupported = useSyncExternalStore(
+        subscribeSupport,
+        getSupportClientSnapshot,
+        getSupportServerSnapshot,
+    );
+
+    const onSuccessRef = useRef(onSuccess);
+    const onErrorRef = useRef(onError);
+    const routesRef = useRef(routes);
+
+    useEffect(() => {
+        onSuccessRef.current = onSuccess;
+        onErrorRef.current = onError;
+        routesRef.current = routes;
+    });
+
+    const register = useCallback(async (name: string): Promise<void> => {
+        setIsLoading(true);
+        setError(null);
+        setErrorInstance(null);
+
+        try {
+            await Passkeys.register({
+                name,
+                routes: routesRef.current,
+            });
+            onSuccessRef.current?.();
+        } catch (e) {
+            const err = toPasskeyError(e);
+            setError(err.message);
+            setErrorInstance(err);
+            onErrorRef.current?.(err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    return {
+        register,
+        isLoading,
+        error,
+        errorInstance,
+        isSupported,
+    };
+};
